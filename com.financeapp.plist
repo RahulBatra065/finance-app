@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.financeapp</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Absolute path to the uvicorn binary inside your venv -->
+        <string>/Users/rahulbatra/Desktop/finance-app/backend/venv/bin/uvicorn</string>
+        <string>main:app</string>
+        <string>--host</string>
+        <string>0.0.0.0</string>
+        <string>--port</string>
+        <string>8000</string>
+    </array>
+
+    <!-- Working directory must be the backend folder so relative imports resolve -->
+    <key>WorkingDirectory</key>
+    <string>/Users/rahulbatra/Desktop/finance-app/backend</string>
+
+    <!-- Load .env so all environment variables are available -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/rahulbatra/Desktop/finance-app/backend/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <!-- Explicit .env loading is handled by python-dotenv inside main.py,
+             but you can hard-code overrides here if needed. -->
+    </dict>
+
+    <!-- Start on login (use LaunchAgents, not LaunchDaemons, for user-level) -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart automatically if the process crashes -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Throttle restarts to avoid a tight crash loop -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Log stdout and stderr -->
+    <key>StandardOutPath</key>
+    <string>/Users/rahulbatra/finance-app/logs/uvicorn.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/rahulbatra/finance-app/logs/uvicorn-error.log</string>
+</dict>
+</plist>
