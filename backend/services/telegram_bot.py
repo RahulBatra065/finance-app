@@ -595,6 +595,9 @@ def build_application():
             "  - What are my top expenses?\n"
             "  - How are my investments doing?\n"
             "  - Give me a summary\n\n"
+            "COMMANDS\n"
+            "  /portfolio — refresh prices and get a snapshot\n"
+            "  /cancel    — cancel a pending transaction\n\n"
             "Just type naturally — I'll figure out what you need."
         )
 
@@ -607,6 +610,70 @@ def build_application():
             await update.message.reply_text("Cancelled. Nothing was saved.")
         else:
             await update.message.reply_text("Nothing pending right now.")
+
+    async def cmd_portfolio(update, context):
+        uid = update.effective_user.id
+        if not guard(uid):
+            return
+        await update.message.reply_text("Refreshing prices…")
+        try:
+            from database import SessionLocal
+            from models import Holding, SplitExpense, Transaction as Txn
+            from services.price_fetcher import refresh_all_prices
+            from datetime import date as dt
+
+            db = SessionLocal()
+            try:
+                count = await refresh_all_prices(db)
+
+                holdings = db.query(Holding).all()
+                total_invested = sum(h.units_or_shares * h.average_buy_price for h in holdings)
+                total_current = sum(
+                    h.units_or_shares * h.current_price if h.current_price is not None
+                    else h.units_or_shares * h.average_buy_price
+                    for h in holdings
+                )
+                pnl = total_current - total_invested
+                pnl_pct = (pnl / total_invested * 100) if total_invested else 0.0
+                pnl_sign = "+" if pnl >= 0 else ""
+
+                lines = ["📈 *Portfolio Snapshot*\n"]
+                for h in sorted(holdings, key=lambda x: x.name):
+                    if h.current_price is None:
+                        continue
+                    invested = h.units_or_shares * h.average_buy_price
+                    current = h.units_or_shares * h.current_price
+                    gain = current - invested
+                    gain_sign = "+" if gain >= 0 else ""
+                    lines.append(f"• {h.name}: ₹{current:,.0f} ({gain_sign}₹{gain:,.0f})")
+
+                lines.append(f"\n💼 Total: ₹{total_current:,.0f} | P&L: {pnl_sign}₹{pnl:,.0f} ({pnl_sign}{pnl_pct:.1f}%)")
+
+                pending = db.query(SplitExpense).filter(SplitExpense.status != "settled").all()
+                if pending:
+                    total_owed = sum(s.amount_owed - s.amount_received for s in pending)
+                    lines.append(f"\n💸 *Pending Splits*: ₹{total_owed:,.0f} across {len(pending)} expense(s)")
+
+                today_d = dt.today()
+                amortised_txns = db.query(Txn).filter(Txn.direction == "debit", Txn.amortise_months.isnot(None)).all()
+                active = []
+                for t in amortised_txns:
+                    txn_date = dt.fromisoformat(t.date)
+                    months_elapsed = (today_d.year - txn_date.year) * 12 + (today_d.month - txn_date.month)
+                    months_left = t.amortise_months - months_elapsed
+                    if months_left > 0:
+                        active.append((t.vendor, round(t.amount / t.amortise_months, 0), months_left))
+                if active:
+                    lines.append("\n📅 *Amortised Expenses*:")
+                    for vendor, monthly, left in sorted(active, key=lambda x: x[2]):
+                        lines.append(f"  • {vendor}: ₹{monthly:,.0f}/month · {left} month{'s' if left != 1 else ''} left")
+
+            finally:
+                db.close()
+
+            await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+        except Exception as e:
+            await update.message.reply_text(f"Error refreshing portfolio: {e}")
 
     async def handle_text(update, context):
         uid = update.effective_user.id
@@ -732,6 +799,7 @@ def build_application():
 
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("portfolio", cmd_portfolio))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
