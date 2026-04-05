@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, String, Text, DateTime
+from sqlalchemy import Column, Integer, Float, String, Text, DateTime, Index
 from database import Base
 
 
@@ -24,6 +24,14 @@ class Transaction(Base):
     payment_method = Column(String, nullable=True)  # upi | debit_card | credit_card | net_banking | cash
     amortise_months = Column(Integer, nullable=True)  # spread cost over N months (e.g. 12 for annual gym)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_transactions_date", "date"),
+        Index("ix_transactions_direction", "direction"),
+        Index("ix_transactions_category", "category"),
+        Index("ix_transactions_date_direction", "date", "direction"),
+        Index("ix_transactions_payment_method", "payment_method"),
+    )
 
 
 class Category(Base):
@@ -71,6 +79,10 @@ class SplitExpense(Base):
     status = Column(String, default="pending")      # pending | partial | settled
     created_at = Column(DateTime, default=datetime.utcnow)
     settled_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_split_expenses_status", "status"),
+    )
 
 
 class AppSettings(Base):

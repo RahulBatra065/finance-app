@@ -520,16 +520,19 @@ export default function Transactions() {
   const [error, setError] = useState('')
 
   const [filters, setFilters] = useState({ start: '', end: '', category: '', vendor: '', direction: '' })
-  const [debouncedVendor, setDebouncedVendor] = useState('')
-  const vendorDebounce = useRef(null)
+  const [debouncedFilters, setDebouncedFilters] = useState({ start: '', end: '', category: '', vendor: '', direction: '' })
+  const filterDebounce = useRef(null)
 
-  function setFilter(k, v) { setFilters(f => ({ ...f, [k]: v })); setPage(1) }
-
-  function handleVendorInput(v) {
-    setFilters(f => ({ ...f, vendor: v }))
-    clearTimeout(vendorDebounce.current)
-    vendorDebounce.current = setTimeout(() => { setDebouncedVendor(v); setPage(1) }, 400)
+  function setFilter(k, v) {
+    const updated = { ...filters, [k]: v }
+    setFilters(updated)
+    setPage(1)
+    clearTimeout(filterDebounce.current)
+    filterDebounce.current = setTimeout(() => setDebouncedFilters(updated), 400)
   }
+
+  // Keep vendor alias for the input handler
+  function handleVendorInput(v) { setFilter('vendor', v) }
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -545,18 +548,18 @@ export default function Transactions() {
       const params = new URLSearchParams()
       params.set('page', page)
       params.set('page_size', PAGE_SIZE)
-      if (filters.start) params.set('start', filters.start)
-      if (filters.end) params.set('end', filters.end)
-      if (filters.category) params.set('category', filters.category)
-      if (debouncedVendor) params.set('vendor', debouncedVendor)
-      if (filters.direction) params.set('direction', filters.direction)
+      if (debouncedFilters.start) params.set('start', debouncedFilters.start)
+      if (debouncedFilters.end) params.set('end', debouncedFilters.end)
+      if (debouncedFilters.category) params.set('category', debouncedFilters.category)
+      if (debouncedFilters.vendor) params.set('vendor', debouncedFilters.vendor)
+      if (debouncedFilters.direction) params.set('direction', debouncedFilters.direction)
       const res = await api.get(`/expenses/transactions?${params}`)
       const data = res.data
       setTransactions(data.transactions ?? data.items ?? data ?? [])
       setTotal(data.total ?? data.count ?? (data.transactions ?? data.items ?? data ?? []).length)
     } catch { setError('Failed to load transactions.') }
     finally { setLoading(false) }
-  }, [page, filters.start, filters.end, filters.category, debouncedVendor, filters.direction])
+  }, [page, debouncedFilters])
 
   useEffect(() => { fetchCategories() }, [fetchCategories])
   useEffect(() => { fetchTransactions() }, [fetchTransactions])
@@ -627,8 +630,9 @@ export default function Transactions() {
           {(filters.start || filters.end || filters.category || filters.vendor || filters.direction) && (
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button className="btn btn-secondary btn-sm" onClick={() => {
-                setFilters({ start: '', end: '', category: '', vendor: '', direction: '' })
-                setDebouncedVendor('')
+                const empty = { start: '', end: '', category: '', vendor: '', direction: '' }
+                setFilters(empty)
+                setDebouncedFilters(empty)
                 setPage(1)
               }}>Clear Filters</button>
             </div>

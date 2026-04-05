@@ -5,7 +5,38 @@ import {
 } from 'recharts'
 import api from '../api.js'
 
-const COLORS = ['#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#64748B', '#06B6D4']
+const COLORS = ['#6366F1', '#22C55E', '#F59E0B', '#F43F5E', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#64748B', '#06B6D4']
+
+function useCountUp(target, duration = 800) {
+  const [value, setValue] = useState(0)
+  const frameRef = useRef(null)
+  const prevTarget = useRef(0)
+
+  useEffect(() => {
+    if (target == null || isNaN(target)) { setValue(target ?? 0); return }
+    const start = prevTarget.current
+    prevTarget.current = target
+    const startTime = performance.now()
+    function tick(now) {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setValue(start + (target - start) * eased)
+      if (progress < 1) frameRef.current = requestAnimationFrame(tick)
+    }
+    if (frameRef.current) cancelAnimationFrame(frameRef.current)
+    frameRef.current = requestAnimationFrame(tick)
+    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }
+  }, [target, duration])
+
+  return value
+}
+
+function AnimatedStat({ value, className, style }) {
+  const animated = useCountUp(value)
+  return <div className={className} style={style}>{fmt(animated)}</div>
+}
 
 function fmt(n) {
   if (n == null) return '₹0'
@@ -159,16 +190,16 @@ export default function Dashboard() {
     } finally {
       setAnalyticsLoading(false)
     }
-  }, [])
+  }, []) // stable — takes period as argument, no deps needed
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchOverview()]).finally(() => setLoading(false))
+    fetchOverview().finally(() => setLoading(false))
   }, [fetchOverview])
 
   useEffect(() => {
     fetchAnalytics(period)
-  }, [period, fetchAnalytics])
+  }, [period]) // fetchAnalytics is stable, omit to avoid spurious re-runs
 
   if (loading) {
     return (
@@ -234,26 +265,26 @@ export default function Dashboard() {
 
       {/* Overview stats */}
       <div className="stats-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
+        <div className="stat-card animate-in" style={{ animationDelay: '0ms' }}>
           <div className="stat-label">Total In</div>
-          <div className="stat-value positive">{fmt(totalIn)}</div>
+          <AnimatedStat value={totalIn} className="stat-value positive" />
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Credits this pay period</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card animate-in" style={{ animationDelay: '60ms' }}>
           <div className="stat-label">Total Out</div>
-          <div className="stat-value negative">{fmt(totalOut)}</div>
+          <AnimatedStat value={totalOut} className="stat-value negative" />
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Debits this pay period</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card animate-in" style={{ animationDelay: '120ms' }}>
           <div className="stat-label">Net Balance</div>
-          <div className={`stat-value ${netBalance >= 0 ? 'positive' : 'negative'}`}>{fmt(netBalance)}</div>
+          <AnimatedStat value={netBalance} className={`stat-value ${netBalance >= 0 ? 'positive' : 'negative'}`} />
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
             In - Out{ccOutstanding > 0 ? ` − CC ${fmt(ccOutstanding)}` : ''}
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card animate-in" style={{ animationDelay: '180ms' }}>
           <div className="stat-label">Avg Daily Spend</div>
-          <div className="stat-value" style={{ fontSize: 20 }}>{fmt(avgDailySpend)}</div>
+          <AnimatedStat value={avgDailySpend} className="stat-value" style={{ fontSize: 22 }} />
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Per day this period</div>
         </div>
       </div>

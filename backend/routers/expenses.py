@@ -439,20 +439,20 @@ def dashboard(
     total_out, cat_spend_amortised, active_amortised = _amortised_total_out(all_debits, period_start, today)
     net = total_in - total_out
 
-    # Credit card outstanding (total charges minus payments, all time)
-    CC_KEYWORDS = {"credit", "amex", "american express", "cc"}
-
-    def _is_cc(t: Transaction) -> bool:
-        if t.payment_method == "credit_card":
-            return True
-        if t.payment_method in ("upi", "debit_card", "net_banking"):
-            return False
-        return any(kw in (t.bank or "").lower() for kw in CC_KEYWORDS)
-
-    all_txns = db.query(Transaction).filter(Transaction.bank.isnot(None)).all()
-    cc_charges = sum(t.amount for t in all_txns if _is_cc(t) and t.direction == "debit")
-    cc_payments = sum(t.amount for t in all_txns if _is_cc(t) and t.direction == "credit")
-    cc_outstanding = max(cc_charges - cc_payments, 0.0)
+    # Credit card outstanding — SQL aggregates, no full table load
+    from sqlalchemy import func, case, or_
+    cc_rows = db.query(
+        Transaction.direction,
+        func.sum(Transaction.amount).label("total"),
+    ).filter(
+        or_(
+            Transaction.payment_method == "credit_card",
+            func.lower(Transaction.bank).contains("credit"),
+            func.lower(Transaction.bank).contains("amex"),
+        )
+    ).group_by(Transaction.direction).all()
+    cc_map = {r.direction: r.total for r in cc_rows}
+    cc_outstanding = max((cc_map.get("debit", 0) or 0) - (cc_map.get("credit", 0) or 0), 0.0)
 
     net_balance = net - cc_outstanding
 
@@ -504,14 +504,16 @@ def dashboard(
     )
     recent_transactions = [_txn_to_dict(t) for t in recent]
 
-    # Pending split receivables
+    # Pending split receivables — single bulk fetch for associated transactions
     from models import SplitExpense
     pending_splits = db.query(SplitExpense).filter(SplitExpense.status != "settled").all()
     total_splits_owed = sum(s.amount_owed - s.amount_received for s in pending_splits)
-    pending_splits_list = []
-    for s in pending_splits:
-        txn = db.query(Transaction).filter(Transaction.id == s.transaction_id).first()
-        pending_splits_list.append(_split_to_dict(s, txn))
+    if pending_splits:
+        split_txn_ids = {s.transaction_id for s in pending_splits}
+        split_txns = {t.id: t for t in db.query(Transaction).filter(Transaction.id.in_(split_txn_ids)).all()}
+    else:
+        split_txns = {}
+    pending_splits_list = [_split_to_dict(s, split_txns.get(s.transaction_id)) for s in pending_splits]
 
     return {
         "period": {"start": month_start, "end": month_end},
@@ -1042,11 +1044,12 @@ def list_splits(
     if status:
         q = q.filter(SplitExpense.status == status)
     splits = q.order_by(SplitExpense.created_at.desc()).all()
-    result = []
-    for s in splits:
-        txn = db.query(Transaction).filter(Transaction.id == s.transaction_id).first()
-        result.append(_split_to_dict(s, txn))
-    return result
+    if splits:
+        txn_ids = {s.transaction_id for s in splits}
+        txns = {t.id: t for t in db.query(Transaction).filter(Transaction.id.in_(txn_ids)).all()}
+    else:
+        txns = {}
+    return [_split_to_dict(s, txns.get(s.transaction_id)) for s in splits]
 
 
 @router.patch("/splits/{split_id}/settle")

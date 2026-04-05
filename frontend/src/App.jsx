@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Investments from './pages/Investments.jsx'
@@ -17,12 +17,9 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
-
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }, [])
 
   return (
     <BrowserRouter>
@@ -33,7 +30,7 @@ export default function App() {
           path="/"
           element={
             <PrivateRoute>
-              <Layout theme={theme} setTheme={setTheme} />
+              <Layout />
             </PrivateRoute>
           }
         >
